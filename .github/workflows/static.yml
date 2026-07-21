@@ -1,43 +1,53 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+name: Port Scanner
 
 on:
-  # Runs on pushes targeting the default branch
-  push:
-    branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+    inputs:
+      target:
+        description: '目标 IP 或域名（如 192.168.1.1 或 example.com）'
+        required: true
+        type: string
+      ports:
+        description: '端口范围（如 22,80,443 或 1-1000）'
+        required: false
+        default: '1-1024'
+        type: string
+      scan_type:
+        description: '扫描类型'
+        required: false
+        default: 'quick'
+        type: choice
+        options:
+          - quick       # 常用端口
+          - full        # 全端口范围（1-65535，耗时较长）
+          - custom      # 使用自定义端口
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: 安装 nmap
+        run: sudo apt-get update && sudo apt-get install -y nmap
+
+      - name: 确定端口参数
+        id: set_ports
+        run: |
+          if [ "${{ github.event.inputs.scan_type }}" == "quick" ]; then
+            echo "ports=-p 21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1723,3306,3389,5900,8080" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.scan_type }}" == "full" ]; then
+            echo "ports=-p 1-65535" >> $GITHUB_OUTPUT
+          else
+            echo "ports=-p ${{ github.event.inputs.ports }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 执行端口扫描
+        run: |
+          echo "正在扫描目标：${{ github.event.inputs.target }}"
+          nmap ${{ steps.set_ports.outputs.ports }} -sS -T4 -v -oN scan_result.txt ${{ github.event.inputs.target }}
+          cat scan_result.txt
+
+      - name: 上传扫描结果（可选）
+        uses: actions/upload-artifact@v4
         with:
-          # Upload entire repository
-          path: '.'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: scan-result
+          path: scan_result.txt
