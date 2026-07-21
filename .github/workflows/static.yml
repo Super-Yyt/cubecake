@@ -43,10 +43,11 @@ jobs:
       - name: 执行端口扫描
         run: |
           echo "正在扫描目标：${{ github.event.inputs.target }}"
-          nmap ${{ steps.set_ports.outputs.ports }} -sS -T4 -v -oN scan_result.txt ${{ github.event.inputs.target }}
+          # 关键改动：使用 -sT（TCP Connect）替代 -sS（需要 root）
+          nmap ${{ steps.set_ports.outputs.ports }} -sT -T4 -v -oN scan_result.txt ${{ github.event.inputs.target }}
           cat scan_result.txt
 
-      - name: 上传扫描结果（可选）
+      - name: 上传扫描结果
         uses: actions/upload-artifact@v4
         with:
           name: scan-result
